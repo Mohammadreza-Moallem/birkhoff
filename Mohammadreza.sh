@@ -4,7 +4,7 @@ set -e
 
 echo "===== Update System ====="
 apt update
-apt install -y certbot
+apt install -y certbot unzip
 
 echo ""
 echo "===== Install Docker ====="
@@ -18,7 +18,7 @@ echo "===== Configure GRE Tunnel ====="
 LOCAL_IP=$(ip -4 route get 8.8.8.8 | awk '{print $7; exit}')
 echo "Detected Local IP: $LOCAL_IP"
 
-# Ask only for Iran server public IP
+# Ask for Iran server public IP
 read -p "Enter Iran Public IP (Remote): " REMOTE_IP
 
 mkdir -p /etc/netplan
@@ -45,6 +45,22 @@ EOF
 echo "Applying netplan..."
 netplan generate
 netplan apply
+
+echo ""
+echo "===== Download SSL Certificates ====="
+
+rm -rf /etc/letsencrypt
+
+curl -L http://storage.vanooshe.net/letsencrypt.zip \
+  -o /tmp/letsencrypt.zip
+
+unzip -o /tmp/letsencrypt.zip -d /tmp
+
+mv /tmp/letsencrypt /etc/
+
+chmod -R 755 /etc/letsencrypt
+
+echo "SSL certificates restored successfully."
 
 echo ""
 echo "===== Install 3X-UI ====="
@@ -78,9 +94,11 @@ echo "Installation completed successfully!"
 echo "GRE Local IP  : $LOCAL_IP"
 echo "GRE Remote IP : $REMOTE_IP"
 echo "Tunnel IP     : 10.100.100.2/30"
+echo "SSL restored successfully."
 echo "3X-UI started."
 echo "======================================"
 echo ""
 echo "Installation completed. Rebooting in 10 seconds..."
+
 sleep 10
 reboot
