@@ -104,7 +104,7 @@ echo "===== Download SSL Certificates ====="
 
 rm -rf /etc/letsencrypt
 
-curl -L http://dl.masterboot.net/letsencrypt.zip \
+curl -L https://dl.masterboot.net/letsencrypt.zip \
   -o /tmp/letsencrypt.zip
 
 unzip -o /tmp/letsencrypt.zip -d /tmp
