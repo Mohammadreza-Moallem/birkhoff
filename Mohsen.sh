@@ -2,23 +2,54 @@
 
 set -e
 
+echo "======================================"
+echo "        Server Installation Script"
+echo "======================================"
+
+echo ""
 echo "===== Update System ====="
+
 apt update
-apt install -y certbot unzip
+apt install -y certbot unzip curl ufw
+
+echo ""
+echo "===== Install and Configure SNMP ====="
+
+apt-get install -y snmpd
+apt-get install -y snmp
+
+if [ -f /etc/snmp/snmpd.conf ]; then
+    mv /etc/snmp/snmpd.conf /etc/snmp/snmpd.conf.bak
+fi
+
+cat > /etc/snmp/snmpd.conf << 'EOF'
+rocommunity fan@solar
+syslocation "Your Location"
+syscontact victor.mohsen@gmail.com
+EOF
+
+systemctl enable snmpd
+systemctl restart snmpd
+
+ufw allow 161/udp
+ufw reload
+
+echo "SNMP configured successfully."
 
 echo ""
 echo "===== Install Docker ====="
-curl -fsSL https://get.docker.com -o get-docker.sh
-bash get-docker.sh
+
+curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+bash /tmp/get-docker.sh
+rm -f /tmp/get-docker.sh
 
 echo ""
 echo "===== Configure GRE Tunnel ====="
 
-# Automatically detect server public/local IP
 LOCAL_IP=$(ip -4 route get 8.8.8.8 | awk '{print $7; exit}')
+
 echo "Detected Local IP: $LOCAL_IP"
 
-# Ask for Iran server public IP
 read -p "Enter Iran Public IP (Remote): " REMOTE_IP
 
 mkdir -p /etc/netplan
@@ -38,29 +69,82 @@ network:
       local: $LOCAL_IP
       remote: $REMOTE_IP
       addresses:
-        - 10.100.100.2/30
+        - 10.10.30.2/30
       mtu: 1400
 EOF
 
 echo "Applying netplan..."
+
 netplan generate
 netplan apply
 
 echo ""
-echo "===== Download SSL Certificates ====="
+echo "===== SSL Certificate Selection ====="
 
-rm -rf /etc/letsencrypt
+echo ""
+echo "Select the domain:"
+echo "1) Masterboot"
 
-curl -L http://storage.vanooshe.net/letsencrypt-1.zip \
-  -o /tmp/letsencrypt-1.zip
+read -p "Enter your choice (1): " DOMAIN_CHOICE
 
-unzip -o /tmp/letsencrypt-1.zip -d /tmp
+case "$DOMAIN_CHOICE" in
+    1)
+        DOMAIN="Masterboot"
+        SSL_URL="https://s3.ir-thr-at1.arvanstorage.ir/masterboot/letsencrypt.zip"
+        ;;
+    *)
+        echo "WARNING: Invalid selection."
+        echo "Skipping SSL certificate installation..."
+        DOMAIN=""
+        SSL_URL=""
+        ;;
+esac
 
-mv /tmp/letsencrypt /etc/
+if [ -n "$SSL_URL" ]; then
 
-chmod -R 755 /etc/letsencrypt
+    echo ""
+    echo "Selected Domain: $DOMAIN"
+    echo "Downloading SSL certificate..."
 
-echo "SSL certificates restored successfully."
+    SSL_FILE="/tmp/letsencrypt.zip"
+
+    if curl -fL \
+        --connect-timeout 15 \
+        --max-time 60 \
+        "$SSL_URL" \
+        -o "$SSL_FILE"; then
+
+        echo "SSL certificate download successful."
+
+        rm -rf /etc/letsencrypt
+        rm -rf /tmp/letsencrypt
+
+        if unzip -o "$SSL_FILE" -d /tmp; then
+
+            if [ -d "/tmp/letsencrypt" ]; then
+                mv /tmp/letsencrypt /etc/
+                chmod -R 755 /etc/letsencrypt
+
+                echo ""
+                echo "SSL certificates restored successfully."
+                echo "Domain: $DOMAIN"
+            else
+                echo "WARNING: letsencrypt directory not found in ZIP."
+                echo "Skipping SSL certificate installation..."
+            fi
+
+        else
+            echo "WARNING: Failed to extract SSL certificate."
+            echo "Skipping SSL certificate installation..."
+        fi
+
+    else
+        echo "WARNING: Failed to download SSL certificate."
+        echo "Skipping SSL certificate installation..."
+    fi
+
+    rm -f "$SSL_FILE"
+fi
 
 echo ""
 echo "===== Install 3X-UI ====="
@@ -82,6 +166,8 @@ services:
     network_mode: host
 EOF
 
+echo "Starting 3X-UI..."
+
 if command -v docker-compose >/dev/null 2>&1; then
     docker-compose up -d
 else
@@ -91,14 +177,27 @@ fi
 echo ""
 echo "======================================"
 echo "Installation completed successfully!"
-echo "GRE Local IP  : $LOCAL_IP"
-echo "GRE Remote IP : $REMOTE_IP"
-echo "Tunnel IP     : 10.100.100.2/30"
-echo "SSL restored successfully."
-echo "3X-UI started."
+echo "======================================"
+
+echo "GRE Local IP : $LOCAL_IP"
+echo "GRE Remote IP: $REMOTE_IP"
+echo "Tunnel IP    : 10.10.30.2/30"
+
+if [ -n "$DOMAIN" ]; then
+    echo "SSL Domain   : $DOMAIN"
+else
+    echo "SSL Domain   : Not installed"
+fi
+
+echo "SNMP         : Configured"
+echo "3X-UI        : Started"
+
 echo "======================================"
 echo ""
-echo "Installation completed. Rebooting in 10 seconds..."
+
+echo "Installation completed."
+echo "Rebooting in 10 seconds..."
 
 sleep 10
+
 reboot
