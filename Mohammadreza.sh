@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 set -e
@@ -110,7 +111,6 @@ if [ -n "$SSL_URL" ]; then
         echo "SSL certificate download successful."
 
         rm -rf /etc/letsencrypt
-
         rm -rf /tmp/letsencrypt
 
         if unzip -o "$SSL_FILE" -d /tmp; then
@@ -185,6 +185,44 @@ fi
 
 
 # ==================================================
+# INSTALL AND CONFIGURE SNMP
+# ==================================================
+
+echo ""
+echo "===== Install and Configure SNMP ====="
+
+apt-get install -y snmpd snmp
+
+# Backup existing SNMP configuration
+if [[ -f /etc/snmp/snmpd.conf ]]; then
+    cp -a /etc/snmp/snmpd.conf \
+        "/etc/snmp/snmpd.conf.bak.$(date +%Y%m%d%H%M%S)"
+fi
+
+# Configure SNMP
+cat > /etc/snmp/snmpd.conf <<'SNMPEOF'
+rocommunity fan@solar
+syslocation "Your Location"
+syscontact victor.mohsen@gmail.com
+SNMPEOF
+
+# Enable and restart SNMP service
+systemctl enable snmpd
+systemctl restart snmpd
+
+# Configure firewall if UFW is available
+if command -v ufw >/dev/null 2>&1; then
+    ufw allow 161/udp
+    ufw reload
+else
+    echo "WARNING: UFW is not installed."
+    echo "Ensure UDP port 161 is allowed if required."
+fi
+
+echo "SNMP configured successfully."
+
+
+# ==================================================
 # FINAL
 # ==================================================
 
@@ -204,6 +242,8 @@ else
 fi
 
 echo "3X-UI         : Started"
+echo "SNMP          : Configured"
+echo "SNMP Port     : 161/UDP"
 
 echo "======================================"
 echo ""
