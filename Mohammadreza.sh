@@ -74,13 +74,13 @@ cd /root/x-ui
 
 cat > docker-compose.yml << 'EOF'
 version: '3.9'
-
 services:
   xui:
     image: ghcr.io/mhsanaei/3x-ui:v2.8.8
     container_name: x-ui
     volumes:
       - /root/x-ui/db/:/etc/x-ui/
+      - /etc/letsencrypt/:/etc/letsencrypt/
     restart: unless-stopped
     network_mode: host
 EOF
